@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Phantom Iframe</title>
+</head>
+<body>
+  <div id="wallet-ui" style="height: 100vh;"></div>
+
+  <script type="module">
+    import { createPhantom } from 'https://unpkg.com/@phantom/wallet-sdk@latest/dist/index.mjs';
+
+    const phantom = await createPhantom({
+      mode: 'element',
+      element: document.getElementById('wallet-ui')
+    });
+
+    try {
+      const { publicKey } = await phantom.connect();
+      console.log("✅ Connected inside iframe:", publicKey.toString());
+
+      window.parent.postMessage({
+        type: 'phantom-connected',
+        publicKey: publicKey.toString()
+      }, '*');
+    } catch (err) {
+      console.error("❌ Phantom connect failed:", err);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>My dApp</title>
+  <style>
+    body { font-family: sans-serif; padding: 40px; }
+    iframe { width: 100%; height: 500px; border: none; }
+  </style>
+</head>
+<body>
+  <h1>Welcome to My dApp</h1>
+  <p>This iframe below runs Phantom in Element Mode.</p>
+
+  <iframe
+    src="/phantom-iframe.html"
+    sandbox="allow-scripts allow-same-origin"
+  ></iframe>
+
+  <script>
+    window.addEventListener('message', (event) => {
+      if (event.data?.type === 'phantom-connected') {
+        console.log("✅ Wallet connected:", event.data.publicKey);
+      }
+    });
+  </script>
+</body>
+</html>
