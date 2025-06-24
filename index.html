@@ -801,10 +801,7 @@
     <button onclick="initializeWallet()" id="initBtn" class="wallet-btn">Initialize Embedded Wallet</button>
     <button onclick="connectWallet()" id="connectBtn" class="wallet-btn" style="display:none;">Connect Wallet</button>
     
-    <div class="wallet-controls" style="display:none;" id="walletControls">
-        <button onclick="showWallet()" id="showBtn" class="wallet-btn secondary">Show Wallet</button>
-        <button onclick="hideWallet()" id="hideBtn" class="wallet-btn secondary">Hide Wallet</button>
-    </div>
+    
     
     <div id="debugInfo" class="debug-info"></div>
     
@@ -815,18 +812,7 @@
 
     <div id="wallet-container"></div>
 
-    <div id="transferForm" class="transfer-form">
-        <h3>Transfer SOL</h3>
-        <div class="form-group">
-            <label for="recipientAddress">Recipient Address:</label>
-            <input type="text" id="recipientAddress" placeholder="Enter recipient's public key">
-        </div>
-        <div class="form-group">
-            <label for="amount">Amount (SOL):</label>
-            <input type="number" id="amount" step="0.001" min="0.001" placeholder="0.001" value="0.001">
-        </div>
-        <button onclick="transferSol()" id="transferBtn" class="wallet-btn">Send SOL</button>
-    </div>
+    
 
     <div id="status" class="wallet-status"></div>
 </div>
@@ -1081,245 +1067,90 @@
     }, 8000);
 
     // Phantom Wallet Integration
-    let phantom = null;
-    let isConnected = false;
-    let userPublicKey = null;
-    const debug = true;
+let phantom = null;
+let isConnected = false;
+let userPublicKey = null;
 
-    function addDebugLog(message) {
-        if (!debug) return;
-        const debugEl = document.getElementById('debugInfo');
-        debugEl.classList.add('show');
-        const timestamp = new Date().toLocaleTimeString();
-        debugEl.innerHTML += `[${timestamp}] ${message}<br>`;
-        debugEl.scrollTop = debugEl.scrollHeight;
-        console.log(message);
-    }
+function showStatus(message, type = 'error') {
+    const statusEl = document.getElementById('status');
+    statusEl.textContent = message;
+    statusEl.className = `wallet-status ${type} show`;
+    setTimeout(() => {
+        statusEl.classList.remove('show');
+    }, 5000);
+}
 
-    function showStatus(message, type = 'error') {
-        const statusEl = document.getElementById('status');
-        statusEl.textContent = message;
-        statusEl.className = `wallet-status ${type} show`;
-        setTimeout(() => {
-            statusEl.classList.remove('show');
-        }, 5000);
-        addDebugLog(`Status: ${message} (${type})`);
-    }
-
-    window.initializeWallet = async function() {
+async function getBalance(publicKey) {
+    const rpcEndpoints = [
+        'https://solana-devnet.g.alchemy.com/v2/ftBuLF3FjZUVwPUTBKwzBgY-65JkvUIl',
+        'https://solana-api.projectserum.com',
+        'https://rpc.ankr.com/solana',
+        'https://api.mainnet-beta.solana.com'
+    ];
+    
+    for (const endpoint of rpcEndpoints) {
         try {
-            addDebugLog('=== Initializing Phantom Embedded Wallet ===');
-            showStatus('Initializing embedded wallet...', 'success');
-            
-            addDebugLog('Importing Phantom SDK...');
-            const { createPhantom } = await import('https://esm.sh/@phantom/wallet-sdk@latest');
-            addDebugLog('✅ SDK imported successfully');
-
-            addDebugLog('Creating Phantom instance in embedded mode...');
-            phantom = await createPhantom({
-                element: "wallet-container",
-                namespace: `phantom_embedded_${Date.now()}`,
-                colorScheme: "light",
-                hideLauncherBeforeOnboarded: false
-            });
-
-            addDebugLog('✅ Phantom instance created successfully');
-            addDebugLog('Available methods: ' + Object.keys(phantom).join(', '));
-            
-            document.getElementById('wallet-container').classList.add('show');
-            document.getElementById('walletControls').style.display = 'flex';
-            document.getElementById('connectBtn').style.display = 'block';
-            document.getElementById('initBtn').style.display = 'none';
-            
-            if (phantom.show) {
-                phantom.show();
-                addDebugLog('✅ Wallet UI shown');
-            }
-
-            showStatus('✅ Embedded wallet initialized successfully!', 'success');
-
+            const { Connection } = await import('https://esm.sh/@solana/web3.js@latest');
+            const connection = new Connection(endpoint, 'confirmed');
+            const balance = await connection.getBalance(publicKey);
+            return (balance / 1_000_000_000).toFixed(6); // Convert lamports to SOL
         } catch (error) {
-            addDebugLog(`❌ Initialization failed: ${error.message}`);
-            console.error('Full error:', error);
-            showStatus('Failed to initialize wallet: ' + error.message, 'error');
+            console.warn(`Failed to get balance from ${endpoint}:`, error);
+            continue;
         }
-    };
+    }
+    return 'Unable to fetch';
+}
 
-    window.connectWallet = async function() {
-        if (!phantom) {
-            showStatus('Please initialize wallet first', 'error');
-            return;
-        }
+window.initializeWallet = async function() {
+    try {
+        showStatus('Initializing embedded wallet...', 'success');
+        
+        const { createPhantom } = await import('https://esm.sh/@phantom/wallet-sdk@latest');
 
-        try {
-            addDebugLog('=== Connecting to Solana ===');
-            showStatus('Connecting to Solana...', 'success');
-            
-            if (!phantom.solana) {
-                throw new Error('Solana provider not available');
-            }
+        phantom = await createPhantom({
+            element: "wallet-container",
+            namespace: `phantom_embedded_${Date.now()}`,
+            colorScheme: "light",
+            hideLauncherBeforeOnboarded: false
+        });
 
-            addDebugLog('Solana provider available, attempting connection...');
-            
-            const response = await phantom.solana.connect();
-            addDebugLog(`Connection response: ${JSON.stringify(response, null, 2)}`);
-            
-            if (response && response.publicKey) {
-                isConnected = true;
-                userPublicKey = response.publicKey;
-                const publicKeyString = response.publicKey.toString();
-                
-                addDebugLog(`✅ Connected! Public Key: ${publicKeyString}`);
-                
-                addDebugLog('Fetching balance...');
-                const balance = await getBalance(response.publicKey);
-                addDebugLog(`Balance: ${balance} SOL`);
-                
-                document.getElementById('walletAddress').textContent = publicKeyString;
-                document.getElementById('walletBalance').textContent = balance;
-                document.getElementById('walletInfo').classList.add('show');
-                document.getElementById('transferForm').classList.add('show');
-                document.getElementById('connectBtn').textContent = 'Wallet Connected ✅';
-                document.getElementById('connectBtn').disabled = true;
-                
-                showStatus('✅ Wallet connected successfully!', 'success');
-                
-            } else {
-                throw new Error('No public key received from wallet');
-            }
-
-        } catch (error) {
-            addDebugLog(`❌ Connection failed: ${error.message}`);
-            console.error('Full error:', error);
-            showStatus('Failed to connect wallet: ' + error.message, 'error');
-        }
-    };
-
-    window.showWallet = function() {
-        if (phantom && phantom.show) {
+        // Automatically show the wallet UI
+        document.getElementById('wallet-container').classList.add('show');
+        
+        // Immediately show the Phantom UI
+        if (phantom.show) {
             phantom.show();
-            addDebugLog('Wallet UI shown');
         }
-    };
-
-    window.hideWallet = function() {
-        if (phantom && phantom.hide) {
-            phantom.hide();
-            addDebugLog('Wallet UI hidden');
-        }
-    };
-
-    async function getBalance(publicKey) {
-        try {
-            addDebugLog('Fetching balance from Solana RPC...');
+        
+        // Listen for connection events
+        phantom.solana.on('connect', async (publicKey) => {
+            isConnected = true;
+            userPublicKey = publicKey;
+            const publicKeyString = publicKey.toString();
             
-            const response = await fetch('https://api.mainnet-beta.solana.com', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    id: 1,
-                    method: 'getBalance',
-                    params: [publicKey.toString()]
-                })
-            });
-
-            const data = await response.json();
+            const balance = await getBalance(publicKey);
             
-            if (data.result && data.result.value !== undefined) {
-                const balance = data.result.value / 1000000000;
-                addDebugLog(`✅ Balance fetched: ${balance} SOL`);
-                return balance.toFixed(6);
-            } else {
-                throw new Error('Invalid response from RPC');
+            document.getElementById('walletAddress').textContent = publicKeyString;
+            document.getElementById('walletBalance').textContent = balance;
+            document.getElementById('walletInfo').classList.add('show');
+            
+            // Hide the wallet UI after connection
+            if (phantom.hide) {
+                phantom.hide();
             }
-        } catch (error) {
-            addDebugLog(`❌ Balance fetch failed: ${error.message}`);
-            return 'Unable to fetch';
-        }
+            
+            showStatus('✅ Wallet connected successfully!', 'success');
+        });
+
+        document.getElementById('initBtn').style.display = 'none';
+        showStatus('Embedded wallet initialized successfully!', 'success');
+
+    } catch (error) {
+        console.error('Initialization error:', error);
+        showStatus('Failed to initialize wallet: ' + error.message, 'error');
     }
-
-    window.transferSol = async function() {
-        if (!phantom || !isConnected || !userPublicKey) {
-            showStatus('Please connect wallet first', 'error');
-            return;
-        }
-
-        const recipientAddress = document.getElementById('recipientAddress').value.trim();
-        const amount = parseFloat(document.getElementById('amount').value);
-
-        if (!recipientAddress) {
-            showStatus('Please enter a recipient address', 'error');
-            return;
-        }
-
-        if (!amount || amount <= 0) {
-            showStatus('Please enter a valid amount', 'error');
-            return;
-        }
-
-        try {
-            addDebugLog('=== Starting SOL Transfer ===');
-            showStatus('Preparing transaction...', 'success');
-            
-            if (phantom.show) {
-                phantom.show();
-            }
-
-            addDebugLog('Importing Solana web3.js...');
-            const { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } = await import('https://esm.sh/@solana/web3.js@latest');
-            
-            let toPubkey;
-            try {
-                toPubkey = new PublicKey(recipientAddress);
-                addDebugLog(`✅ Valid recipient address: ${recipientAddress}`);
-            } catch (error) {
-                throw new Error('Invalid recipient address format');
-            }
-
-            const fromPubkey = userPublicKey;
-            const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
-            addDebugLog(`Transfer amount: ${amount} SOL (${lamports} lamports)`);
-
-            const transaction = new Transaction();
-            transaction.add(
-                SystemProgram.transfer({
-                    fromPubkey: fromPubkey,
-                    toPubkey: toPubkey,
-                    lamports: lamports,
-                })
-            );
-
-            addDebugLog('Transaction created, requesting signature...');
-            showStatus('Please approve the transaction in your wallet...', 'success');
-
-            const { signature } = await phantom.solana.signAndSendTransaction(transaction);
-            
-            addDebugLog(`✅ Transaction signed and sent! Signature: ${signature}`);
-            showStatus(`✅ SOL transferred successfully! Signature: ${signature}`, 'success');
-
-            setTimeout(async () => {
-                const newBalance = await getBalance(fromPubkey);
-                document.getElementById('walletBalance').textContent = newBalance;
-                addDebugLog(`Balance updated: ${newBalance} SOL`);
-            }, 3000);
-
-        } catch (error) {
-            addDebugLog(`❌ Transfer failed: ${error.message}`);
-            console.error('Full error:', error);
-            
-            let errorMessage = error.message;
-            if (error.message.includes('User rejected')) {
-                errorMessage = 'Transaction was cancelled by user';
-            } else if (error.message.includes('insufficient')) {
-                errorMessage = 'Insufficient balance for this transaction';
-            }
-            
-            showStatus('❌ Transfer failed: ' + errorMessage, 'error');
-        }
-    };
+};
 </script>
 </body>
 </html>
